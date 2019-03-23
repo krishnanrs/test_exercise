@@ -1,0 +1,141 @@
+#!/usr/bin/env python
+"""Launch or delete kubernetes services using yaml resource templates"""
+
+import argparse
+import json
+import logging
+import os
+import re
+import sys
+import subprocess
+import yaml
+
+
+class CommandFailed(Exception):
+    """An exception to track that a command failed to execute successfully.
+
+    Carries the exit code of the command that failed in `exit_code`.
+    """
+    def __init__(self, exit_code, message=''):
+        Exception.__init__(self)
+        self.exit_code = exit_code
+        self.message = message
+
+
+class CommandFormatter(argparse.ArgumentDefaultsHelpFormatter,
+                       argparse.RawDescriptionHelpFormatter):
+    """Argparse formatter to display __doc__ string correctly"""
+    pass
+
+parser = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=CommandFormatter)
+parser.add_argument('-v', '--verbose', dest='verbose',
+                    action='store_true',
+                    help='Be more verbose about what kube-deploy is doing.')
+parser.add_argument('-n', '--namespace', default='default',
+                    help='The namespace to use for deployments. Defaults to default namespace')
+parser.add_argument('-f', '--deploymentfile',
+                    help='File or URL containing the application deployment template')
+parser.add_argument('-s', '--servicename', default='book-info',
+                    help='Service name to use for the deployment')
+parser.add_argument('-e', '--nodeport', dest='nodeport',
+                    action='store_true',
+                    help='Expose deployment with a Nodeport')
+parser.add_argument('action', metavar='action', type=str, default=None,
+                    choices=['delete', 'deploy', 'show'],
+                    help='deploy, delete or show a deployment')
+
+log = logging.getLogger('kube-deploy')
+
+
+def cmd(command, input='', quiet=True, ignore_errors=False, out_stderr=True):
+    """Run cmd and return exit status or output"""
+
+    stderr = subprocess.STDOUT
+    if not out_stderr:
+        stderr = subprocess.PIPE
+
+    if not isinstance(command, list):
+        command = command.split(' ')
+
+    log.debug('Running cmd: "%s"', ' '.join(command))
+
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE,
+                            stderr=stderr,
+                            stdin=subprocess.PIPE)
+
+    # Sometimes process closes before we can write to stdin
+    # Catch the real error below unless ignore_errors
+    stdin_fail = False
+    try:
+        proc.stdin.write(input)
+        proc.stdin.close()
+    except IOError:
+        stdin_fail = True
+
+    out = ''
+    while True:
+        nextline = proc.stdout.readline()
+        out += nextline
+        if nextline == '' and proc.poll() is not None:
+            break
+        if not quiet:
+            sys.stdout.write(nextline)
+            sys.stdout.flush()
+
+    if stdin_fail:
+        log.warn('Failed to write input for cmd: %s', command)
+        log.debug('stdin: %s', input)
+        log.debug('stdout: %s', out)
+
+    if proc.returncode > 0 and ignore_errors is False:
+        err_mesg = 'Cmd %s failed with: %s', command, out
+        log.critical(err_mesg)
+        raise CommandFailed(proc.returncode, out)
+
+    return out
+
+def main():
+    """Setup and invoke kubectl command"""
+    logging.basicConfig(stream=sys.stderr,
+                        format='[%(levelname)s] %(message)s')
+
+    args = parser.parse_args()
+
+    if args.verbose:
+        log.setLevel(logging.DEBUG)
+    else:
+        log.setLevel(logging.INFO)
+
+    if args.action in ['deploy', 'delete'] and args.servicename is None:
+        parser.error('deploy and delete actions require a servicename to be specified')
+    if args.action in ['deploy', 'delete'] and args.deploymentfile is None:
+        parser.error('deploy and delete actions require a deploymentfile to be specified')
+
+    if args.namespace != 'default':
+        # Create namespace and ignore error if it already exists
+        cmd('kubectl create namespace %s' % (args.namespace), ignore_errors=True)
+
+    if args.action == 'deploy':
+        cmd('kubectl -n %s apply -f %s' % (args.namespace, args.deploymentfile))
+        if args.nodeport:
+        # HACK: For now assume it is just the productpage-v1 app which needs to be exposed
+        # Need a better way to capture the app that requires to be exposed
+            output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
+            if 'NotFound' in output:
+                cmd('kubectl -n %s expose deployment productpage-v1 --type=NodePort --name=%s' % (args.namespace, args.servicename))
+
+    if args.action == 'show':
+        print(cmd('kubectl -n %s get deployments' % (args.namespace)))
+        print(cmd('kubectl -n %s describe services %s' % (args.namespace, args.servicename)))
+        
+
+    if args.action == 'delete':
+        output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
+        if 'NotFound' not in output:
+            cmd('kubectl -n %s delete service %s' % (args.namespace, args.servicename))
+        cmd('kubectl delete -n %s -f %s' % (args.namespace, args.deploymentfile))
+
+
+if __name__ == '__main__':
+    main()
