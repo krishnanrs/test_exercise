@@ -10,6 +10,7 @@ import sys
 import subprocess
 import yaml
 import re
+from unit_test import UnitTest
 
 
 class CommandFailed(Exception):
@@ -43,7 +44,7 @@ parser.add_argument('-e', '--nodeport', dest='nodeport',
                     action='store_true',
                     help='Expose deployment with a Nodeport')
 parser.add_argument('action', metavar='action', type=str, default=None,
-                    choices=['delete', 'deploy', 'show'],
+                    choices=['delete', 'deploy', 'show', 'run-tests'],
                     help='deploy, delete or show a deployment')
 
 log = logging.getLogger('kube-deploy')
@@ -141,12 +142,17 @@ def main():
                 if host is not None and port is not None:
                     log.info('Application running at http://%s:%s', host, port)
 
-    if args.action == 'show':
+    if args.action == 'show' or args.action == 'run-tests':
         print(cmd('kubectl -n %s get deployments' % (args.namespace)))
         output = cmd('kubectl -n %s describe services %s' % (args.namespace, args.servicename))
         host, port = parse_node_port(output)
         if host is not None and port is not None:
-            log.info('Application running at http://%s:%s', host, port)
+            if args.action != 'run-tests':
+                log.info('Application running at http://%s:%s', host, port)
+            else:
+                log.info('Running unit tests')
+                tests = UnitTest('http://%s:%s' % (host, port))
+                tests.run_all_tests()
 
     if args.action == 'delete':
         output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
