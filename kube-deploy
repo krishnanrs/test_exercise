@@ -9,6 +9,7 @@ import re
 import sys
 import subprocess
 import yaml
+import re
 
 
 class CommandFailed(Exception):
@@ -95,6 +96,18 @@ def cmd(command, input='', quiet=True, ignore_errors=False, out_stderr=True):
 
     return out
 
+def parse_node_port(output):
+    """Parse the hostname and node port from output data"""
+    host = None
+    port = None
+    m = re.search('(^LoadBalancer Ingress:\s+)(\w+)', output, re.MULTILINE)
+    if m:
+        host = m.group(2)
+    m = re.search('(^NodePort:\s+)(\S+)(\s+)(\d+)(\S+)', output, re.MULTILINE)
+    if m:
+        port = m.group(4)
+    return host, port
+
 def main():
     """Setup and invoke kubectl command"""
     logging.basicConfig(stream=sys.stderr,
@@ -123,12 +136,17 @@ def main():
         # Need a better way to capture the app that requires to be exposed
             output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
             if 'NotFound' in output:
-                cmd('kubectl -n %s expose deployment productpage-v1 --type=NodePort --name=%s' % (args.namespace, args.servicename))
+                output = cmd('kubectl -n %s expose deployment productpage-v1 --type=NodePort --name=%s' % (args.namespace, args.servicename))
+                host, port = parse_node_port(output)
+                if host is not None and port is not None:
+                    log.info('Application running at http://%s:%s', host, port)
 
     if args.action == 'show':
         print(cmd('kubectl -n %s get deployments' % (args.namespace)))
-        print(cmd('kubectl -n %s describe services %s' % (args.namespace, args.servicename)))
-        
+        output = cmd('kubectl -n %s describe services %s' % (args.namespace, args.servicename))
+        host, port = parse_node_port(output)
+        if host is not None and port is not None:
+            log.info('Application running at http://%s:%s', host, port)
 
     if args.action == 'delete':
         output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
