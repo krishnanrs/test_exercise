@@ -40,8 +40,7 @@ parser.add_argument('-f', '--deploymentfile',
                     help='File or URL containing the application deployment template')
 parser.add_argument('-s', '--servicename', default='book-info',
                     help='Service name to use for the deployment')
-parser.add_argument('-e', '--nodeport', dest='nodeport',
-                    action='store_true',
+parser.add_argument('-e', '--nodeport', dest='nodeport', default=None,
                     help='Expose deployment with a Nodeport')
 parser.add_argument('action', metavar='action', type=str, default=None,
                     choices=['delete', 'deploy', 'show', 'run-tests', 'benchmark'],
@@ -137,14 +136,17 @@ def main():
     if args.action == 'deploy':
         cmd('kubectl -n %s apply -f %s' % (args.namespace, args.deploymentfile))
         if args.nodeport:
-        # HACK: For now assume it is just the productpage-v1 app which needs to be exposed
-        # Need a better way to capture the app that requires to be exposed
-            output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
-            if 'NotFound' in output:
-                output = cmd('kubectl -n %s expose deployment productpage-v1 --type=NodePort --name=%s' % (args.namespace, args.servicename))
-                host, port = parse_node_port(output)
-                if host is not None and port is not None:
-                    log.info('Application running at http://%s:%s', host, port)
+            output = cmd('kubectl get deployments')
+            if args.nodeport in output:
+                output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
+                if 'NotFound' in output:
+                    output = cmd('kubectl -n %s expose deployment %s --type=NodePort --name=%s' % (
+                        args.namespace, args.nodeport, args.servicename))
+                    host, port = parse_node_port(output)
+                    if host is not None and port is not None:
+                        log.info('Application running at http://%s:%s', host, port)
+            else:
+                log.info('Cannot find deployment named %s', args.nodeport)
 
     if args.action == 'show':
         print(cmd('kubectl -n %s get deployments' % (args.namespace)))
