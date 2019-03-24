@@ -44,7 +44,7 @@ parser.add_argument('-e', '--nodeport', dest='nodeport',
                     action='store_true',
                     help='Expose deployment with a Nodeport')
 parser.add_argument('action', metavar='action', type=str, default=None,
-                    choices=['delete', 'deploy', 'show', 'run-tests'],
+                    choices=['delete', 'deploy', 'show', 'run-tests', 'benchmark'],
                     help='deploy, delete or show a deployment')
 
 log = logging.getLogger('kube-deploy')
@@ -130,6 +130,10 @@ def main():
         # Create namespace and ignore error if it already exists
         cmd('kubectl create namespace %s' % (args.namespace), ignore_errors=True)
 
+    if args.action == 'show' or args.action == 'run-tests' or args.action == 'benchmark':
+        output = cmd('kubectl -n %s describe services %s' % (args.namespace, args.servicename))
+        host, port = parse_node_port(output)
+
     if args.action == 'deploy':
         cmd('kubectl -n %s apply -f %s' % (args.namespace, args.deploymentfile))
         if args.nodeport:
@@ -142,17 +146,22 @@ def main():
                 if host is not None and port is not None:
                     log.info('Application running at http://%s:%s', host, port)
 
-    if args.action == 'show' or args.action == 'run-tests':
+    if args.action == 'show':
         print(cmd('kubectl -n %s get deployments' % (args.namespace)))
-        output = cmd('kubectl -n %s describe services %s' % (args.namespace, args.servicename))
-        host, port = parse_node_port(output)
         if host is not None and port is not None:
-            if args.action != 'run-tests':
-                log.info('Application running at http://%s:%s', host, port)
-            else:
-                log.info('Running unit tests')
-                tests = UnitTest('http://%s:%s' % (host, port))
-                tests.run_all_tests()
+            log.info('Application running at http://%s:%s', host, port)
+
+    if args.action == 'run-tests':
+        if host is not None and port is not None:
+            log.info('Running unit tests')
+            tests = UnitTest('http://%s:%s' % (host, port))
+            tests.run_all_tests()
+
+    if args.action == 'benchmark':
+        log.info('Running benchmark tests')
+        if host is not None and port is not None:
+            output = cmd('wrk2 -t2 -c100 -d30s -R2000 --u_latency http://%s:%s/api/v1/products' % (host, port))
+            print(output)
 
     if args.action == 'delete':
         output = cmd('kubectl get service %s' % args.servicename, ignore_errors=True)
