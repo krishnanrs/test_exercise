@@ -65,7 +65,8 @@ Transfer/sec:    131.65KB
 
 To invoke individual steps and to test it out, use the `kude-deploy` python script with the appropriate options:
 
-```$ python kube-deploy -h
+```
+$ python kube-deploy -h
 usage: kube-deploy [-h] [-v] [-n NAMESPACE] [-f DEPLOYMENTFILE]
                    [-s SERVICENAME] [-e NODEPORT]
                    action
@@ -89,4 +90,5 @@ optional arguments:
                         Service name to use for the deployment (default: book-
                         info)
   -e NODEPORT, --nodeport NODEPORT
-                        Expose deployment with a Nodeport (default: None)```
+                        Expose deployment with a Nodeport (default: None)
+  ```
