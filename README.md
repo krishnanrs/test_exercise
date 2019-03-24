@@ -2,7 +2,7 @@
 A simple test exercise for deploying the [bookinfo](https://istio.io/docs/examples/bookinfo/) sample application in a kubenetes cluster, running unit tests, benchmarking using [wrk2](https://github.com/giltene/wrk2) and cleaning up the deployment.
 
 ## Requirements
- - Local kubenetes deployment using [Docker Desktop] (https://www.docker.com/products/docker-desktop), [minikube] (https://kubernetes.io/docs/tasks/tools/install-minikube/) or equivalent
+ - Local kubenetes deployment using [Docker Desktop](https://www.docker.com/products/docker-desktop), [minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/) or equivalent
  - Python 2.7 or later
  - [wrk2](https://github.com/giltene/wrk2) for benchmarking the product page API
  
