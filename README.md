@@ -10,7 +10,8 @@ A simple test exercise for deploying the [bookinfo](https://istio.io/docs/exampl
  
  To run the full end-to-end suite for deploying the application, running unit tests, benchmarking and cleanup, simply invoke the `bookinfo.sh` wrapper script.
  
- ```$ ./bookinfo.sh 
+ ```
+ $ ./bookinfo.sh 
 Deploying Bookinfo application
 [DEBUG] Running cmd: "kubectl -n default apply -f https://raw.githubusercontent.com/istio/istio/release-1.1/samples/bookinfo/platform/kube/bookinfo.yaml"
 [DEBUG] Running cmd: "kubectl get deployments"
